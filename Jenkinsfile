@@ -1,13 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        IMAGE_NAME   = "yourdockerhubuser/clinic-frontend"
-        IMAGE_TAG    = "${env.BUILD_NUMBER}"
-        DEPLOY_HOST  = "deploy@your-server-ip"
-        DEPLOY_PATH  = "/opt/clinic-app"
-    }
-
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -21,58 +14,38 @@ pipeline {
             }
         }
 
-        stage('Lint / Sanity check') {
+        stage('Sanity check') {
             steps {
-                // Placeholder until real test suite exists.
-                // Once backend is built, run: npm ci && npm test here.
-                sh 'echo "No automated tests yet — add npm test stage when backend exists"'
+                // Placeholder until a real test suite exists.
+                sh 'echo "No automated tests yet"'
             }
         }
 
-        stage('Build Docker image') {
+        stage('Build and Deploy') {
             steps {
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest ."
+                // Same machine, so no docker push / no SSH needed.
+                // docker compose builds the image AND restarts the containers in one go.
+                sh 'docker compose down'
+                sh 'docker compose up -d --build'
             }
         }
 
-        stage('Push to registry') {
+        stage('Health check') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${IMAGE_NAME}:latest
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy to server') {
-            steps {
-                sshagent(credentials: ['clinic-deploy-ssh-key']) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_HOST} '
-                            cd ${DEPLOY_PATH} &&
-                            docker compose pull &&
-                            docker compose up -d --remove-orphans &&
-                            docker image prune -f
-                        '
-                    '''
-                }
+                // wait a moment for nginx to come up, then verify it responds
+                sh 'sleep 5'
+                sh 'curl -f http://localhost || (echo "Site did not respond" && exit 1)'
             }
         }
     }
 
     post {
         success {
-            echo "Deployed build ${IMAGE_TAG} successfully."
+            echo "Deployed build ${env.BUILD_NUMBER} successfully on this server."
         }
         failure {
-            echo "Build ${IMAGE_TAG} failed — check logs above."
+            echo "Build ${env.BUILD_NUMBER} failed — check logs above."
+            sh 'docker compose logs --tail=50'
         }
     }
 }
