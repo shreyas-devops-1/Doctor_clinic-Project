@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clinic-frontend
+    restart: unless-stopped
+    networks:
+      - clinic-net
+    # No host port published — only the reverse proxy talks to it
+
+  # Uncomment once the Node backend exists
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: clinic-backend
+  #   restart: unless-stopped
+  #   env_file:
+  #     - ./backend/.env
+  #   networks:
+  #     - clinic-net
+
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: clinic-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # - "443:443"   # add once you set up TLS certs
+    volumes:
+      - ./reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend
+    networks:
+      - clinic-net
+
+networks:
+  clinic-net:
+    driver: bridge
