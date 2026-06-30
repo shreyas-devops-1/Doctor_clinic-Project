@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        COMPOSE_BAKE = "false"
+        DOCKER_BUILDKIT = "0"
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
